@@ -40,12 +40,12 @@ def connect(host='localhost', port=6379, timeout=None):
     """
     return RedisClient(host, port, timeout)
 
-REDIS_YIELD_COMMANDS = ['subscribe','psubscribe','monitor']
-REDIS_YIELD_COMMANDS = frozenset(
-                                    map(str.lower, REDIS_YIELD_COMMANDS)
-                                    +
-                                    map(str.upper, REDIS_YIELD_COMMANDS)
-                                )
+YIELD_COMMANDS = [
+                    'subscribe',
+                    'psubscribe',
+                    'monitor',
+                 ]
+YIELD_COMMANDS = frozenset(sum([[x.lower(), x.upper()] for x in YIELD_COMMANDS], []))
 
 class RedisClient(object):
     """An gevent Redis client.
@@ -64,15 +64,18 @@ class RedisClient(object):
     (mostly tested against the LIST/HASH/PUBSUB API so far).
     """
 
-    def __init__(self, host='127.0.0.1', port=6379, timeout=None):
+    def __init__(self, host='localhost', port=6379, timeout=None):
         """Connect to a Redis Server."""
         self._address = (host, port)
         self._timeout = timeout
         self._socket  = socket.create_connection(self._address, self._timeout)
         self._rfile   = self._socket.makefile('r', 0)
 
-    def close(self):
-        """Destroys this redis client, freeing any file descriptors used."""
+    def __del__(self):
+        """Destroys this redis client, freeing any file descriptors used.
+
+        If you want to disconnect redis immediately, you can use `del redis_client`
+        """
         self._socket.close()
 
     def __getattr__(self, command):
@@ -90,7 +93,7 @@ class RedisClient(object):
             while 1:
                 yield self._parse_respone()
 
-        if command not in REDIS_YIELD_COMMANDS:
+        if command not in YIELD_COMMANDS:
             return command_warpper
         else:
             return yield_command_warpper
@@ -145,8 +148,8 @@ class RedisError(Exception):
 
 def test():
     redis_client = connect('127.0.0.1', 6379)
-    for msg in redis_client.psubscribe('*'):
-        print msg
+    print redis_client.set('foo', 'bar')
+    print redis_client.get('foo')
 
 if __name__ == '__main__':
     test()
