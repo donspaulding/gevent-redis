@@ -80,24 +80,24 @@ class RedisClient(object):
         self._address = (host, port)
         self._timeout = timeout
         self._socket  = socket.create_connection(self._address, self._timeout)
-        self._rfile   = self._socket.makefile('rb', -1)
+        self._rfile   = self._socket.makefile('r')
 
     def __del__(self):
         """Destroys this redis client, freeing any file descriptors used."""
         self._socket.close()
 
-    def _encode_command(self, command, *args):
-        return '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
-               + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
-
     def _execute_command(self, command, *args):
         """Executes a redis command and return a result"""
-        self._socket.send(self._encode_command(command, *args))
+        data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
+               + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
+        self._socket.send(data)
         return self._read_respone()
 
     def _execute_yield_command(self, command, *args):
         """Executes a redis command and yield multiple results"""
-        self._socket.send(self._encode_command(command, *args))
+        data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
+               + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
+        self._socket.send(data)
         while 1:
             yield self._read_respone()
 
@@ -105,21 +105,18 @@ class RedisClient(object):
         """Read a completed result data from the redis server."""
         read = self._rfile.read
         readline = self._rfile.readline
-        byte = read(1)
+        response = readline()
+        byte, response = response[0], response[1:]
         if byte == '+':
-            return readline()[:-2]
-        elif byte == '-':
-            return RedisError(readline()[:-2])
+            return response[:2]
         elif byte == ':':
-            return int(readline())
+            return int(response)
         elif byte == '$':
-            number = int(readline())
+            number = int(response)
             if number == -1:
                 return None
             else:
-                data = read(number)
-                read(2)
-                return data
+                return read(number+2)[:-2]
         elif byte == '*':
             number = int(readline())
             if number == -1:
@@ -127,20 +124,19 @@ class RedisClient(object):
             else:
                 result = []
                 while number:
-                    byte = read(1)
+                    response = readline()
+                    byte, response = response[0], response[1:]
                     if byte == '$':
-                        length  = int(readline())
-                        element = read(length)
-                        result.append(element)
-                        read(2)
+                        result.append(read(int(response)+2)[:-2])
                     else:
                         if byte == ':':
-                            element = int(readline())
+                            result.append(int(readline()))
                         else:
-                            element = readline()[:-2]
-                        result.append(element)
+                            result.append(readline()[:-2])
                     number -= 1
                 return result
+        elif byte == '-':
+            return RedisError(readline()[:-2])
         else:
             raise RedisError('bulk cannot startswith %r' % c)
 
