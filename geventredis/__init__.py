@@ -73,7 +73,7 @@ class RedisClient(object):
         self._address = (host, port)
         self._timeout = timeout
         self._socket  = socket.create_connection(self._address, self._timeout)
-        self._rfile   = self._socket.makefile('r', 0)
+        self._rfile   = self._socket.makefile('rb', -1)
 
     def __del__(self):
         """Destroys this redis client, freeing any file descriptors used."""
