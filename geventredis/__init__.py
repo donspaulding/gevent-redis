@@ -119,11 +119,11 @@ class RedisClient(object):
                     byte = read(1)
                     if byte == '$':
                         length  = int(readline())
-                        element = read(number)
+                        element = read(length)
                         result.append(element)
                         read(2)
                     else:
-                        if c == ':':
+                        if byte == ':':
                             element = int(readline())
                         else:
                             element = readline()[:-2]
@@ -140,7 +140,7 @@ class RedisError(Exception):
 
 def test():
     redis_client = connect('127.0.0.1', 6379)
-    for msg in redis_client.monitor():
+    for msg in redis_client.psubscribe('*'):
         print msg
 
 if __name__ == '__main__':
