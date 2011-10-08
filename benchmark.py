@@ -20,7 +20,7 @@ def test_redispy():
         job.join()
     time_end = time.time()
     print 'test_redispy end', time_end
-    print 'total time', time_end - time_begin
+    print 'test_redispy total', time_end - time_begin
 
 def test_geventredis():
     import gevent, geventredis
@@ -37,7 +37,7 @@ def test_geventredis():
     gevent.joinall(jobs)
     time_end = time.time()
     print 'test_geventredis end', time_end
-    print 'total time', time_end - time_begin
+    print 'test_geventredis total', time_end - time_begin
 
 def test():
     test_redispy()
