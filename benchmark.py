@@ -28,7 +28,7 @@ def test_redispy():
 def test_geventredis():
     import gevent, geventredis
     redis_client = geventredis.connect()
-    redis_client.DEL('x')
+    redis_client.delete('x')
     del redis_client
     time_begin = time.time()
     print 'test_geventredis begin', time_begin
@@ -43,8 +43,8 @@ def test_geventredis():
     print 'test_geventredis total', time_end - time_begin
 
 def test():
-    test_redispy()
     test_geventredis()
+    test_redispy()
 
 if __name__ == '__main__':
     test()
