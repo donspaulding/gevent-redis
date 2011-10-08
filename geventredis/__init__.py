@@ -65,17 +65,18 @@ class RedisClient(object):
     """
 
     def __init__(self, host='localhost', port=6379, timeout=None):
-        """Connect to a Redis Server."""
+        """Create a Reids Client and Connect to a Redis Server.
+
+        If you want to disconnect redis server and free resources immediately,
+        you can use `del redis_client`
+        """
         self._address = (host, port)
         self._timeout = timeout
         self._socket  = socket.create_connection(self._address, self._timeout)
         self._rfile   = self._socket.makefile('r', 0)
 
     def __del__(self):
-        """Destroys this redis client, freeing any file descriptors used.
-
-        If you want to disconnect redis immediately, you can use `del redis_client`
-        """
+        """Destroys this redis client, freeing any file descriptors used."""
         self._socket.close()
 
     def __getattr__(self, command):
@@ -84,21 +85,21 @@ class RedisClient(object):
             data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
                    + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
             self._socket.send(data)
-            return self._parse_respone()
+            return self.__parse_respone()
 
         def yield_command_warpper(*args):
             data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
                    + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
             self._socket.send(data)
             while 1:
-                yield self._parse_respone()
+                yield self.__parse_respone()
 
         if command not in YIELD_COMMANDS:
             return command_warpper
         else:
             return yield_command_warpper
 
-    def _parse_respone(self):
+    def __parse_respone(self):
         """Read a completed result data from the redis server."""
         read = self._rfile.read
         readline = self._rfile.readline
