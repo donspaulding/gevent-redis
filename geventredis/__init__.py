@@ -40,7 +40,12 @@ def connect(host='localhost', port=6379, timeout=None):
     """
     return RedisClient(host, port, timeout)
 
-REDIS_YIELD_COMMANDS = frozenset(['SUBSCRIBE','PSUBSCRIBE','MONITOR'])
+REDIS_YIELD_COMMANDS = ['subscribe','psubscribe','monitor']
+REDIS_YIELD_COMMANDS = frozenset(
+                                    map(str.lower, REDIS_YIELD_COMMANDS)
+                                    +
+                                    map(str.upper, REDIS_YIELD_COMMANDS)
+                                )
 
 class RedisClient(object):
     """An gevent Redis client.
@@ -85,7 +90,7 @@ class RedisClient(object):
             while 1:
                 yield self._parse_respone()
 
-        if command.upper() not in REDIS_YIELD_COMMANDS:
+        if command not in REDIS_YIELD_COMMANDS:
             return command_warpper
         else:
             return yield_command_warpper
