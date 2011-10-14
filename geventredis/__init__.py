@@ -16,6 +16,9 @@
 
 """Redis client implementations using gevent.socket"""
 
+import collections
+import cStringIO
+
 try:
     from gevent import socket
 except ImportError:
@@ -53,6 +56,28 @@ def list_or_args(keys, args):
     if args:
         keys.extend(args)
     return keys
+
+class RedisSocket(socket.socket):
+
+    def __init__(self, *args, **kwargs):
+        socket.socket.__int__(self, *args, **kwargs)
+        self._read_buffer = cStringIO.StringIO()
+
+    def read_bytes(self, size):
+        bufsize = 8192
+        recv = self.recv
+        buf = self._read_buffer
+        size -= len(read_buffer)
+        while size < 0:
+            try:
+                data = recv(bufsize)
+                if not data:
+                    break
+
+            if not data
+            size -= len(data)
+
+
 
 class RedisClient(object):
     """An gevent Redis client.

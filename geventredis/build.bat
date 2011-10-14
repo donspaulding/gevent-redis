@@ -1,0 +1,1 @@
+cython.py core.pyx && bash -c "gcc client.c -g -I/d/Python27/include -shared -L/d/Python27/libs -lpython27 -o core.pyd"
