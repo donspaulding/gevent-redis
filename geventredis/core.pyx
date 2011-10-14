@@ -21,6 +21,11 @@ if sys.version_info[:2] < (2, 7):
 else:
     def _get_memory(str string, int offset):
         return memoryview(string)[offset:]
+        
+class RedisError(Exception):
+    """Exception thrown for an unsuccessful Redis request."""
+    def __init__(self, message):
+        Exception.__init__(self, '(Error): %s' % message)
 
 class RedisSocket(object):
     """Green version of :class:`geventredis.client.RedisClient`
@@ -392,10 +397,46 @@ class RedisSocket(object):
             buf.write(data)
         return buf.getvalue()
 
-    def send_request(self, str action, *args):
-        pass
+    def send_request(self, str command, *args):
+        data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command) + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
+        self.send(data)
         
     def read_response(self):
-        pass
+        read = self.read
+        readline = self.readline
+        response = readline()
+        byte, response = response[0], response[1:]
+        if byte == '+':
+            return response[:2]
+        elif byte == ':':
+            return int(response)
+        elif byte == '$':
+            number = int(response)
+            if number == -1:
+                return None
+            else:
+                return read(number+2)[:-2]
+        elif byte == '*':
+            number = int(readline())
+            if number == -1:
+                return None
+            else:
+                result = []
+                while number:
+                    response = readline()
+                    byte, response = response[0], response[1:]
+                    if byte == '$':
+                        result.append(read(int(response)+2)[:-2])
+                    else:
+                        if byte == ':':
+                            result.append(int(readline()))
+                        else:
+                            result.append(readline()[:-2])
+                    number -= 1
+                return result
+        elif byte == '-':
+            return RedisError(readline()[:-2])
+        else:
+            raise RedisError('bulk cannot startswith %r' % byte)
         
     
