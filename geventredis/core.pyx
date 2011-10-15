@@ -2,13 +2,17 @@
 """
 
 import sys
+import _socket
+from _socket import socket as _realsocket
+from _socket import error, timeout, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_ERROR
 from time import time
 from os import strerror
 from cStringIO import StringIO
 from errno import EAGAIN, EWOULDBLOCK, EBADF, EISCONN, EWOULDBLOCK, EINPROGRESS, EALREADY, EINVAL, EINTR
-from _socket import socket, getdefaulttimeout, getaddrinfo, error, timeout, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_ERROR
 from gevent.hub import get_hub
 from gevent.timeout import Timeout
+
+cdef object RedisError = Exception
 
 cdef bint is_windows = sys.platform == 'win32'
 
@@ -19,33 +23,50 @@ cdef object timeout_default = object()
 if sys.version_info[:2] < (2, 7):
     _get_memory = buffer
 else:
-    def _get_memory(str string, int offset):
+
+    def _get_memory(string, offset):
         return memoryview(string)[offset:]
         
-class RedisError(Exception):
-    """Exception thrown for an unsuccessful Redis request."""
-    def __init__(self, message):
-        Exception.__init__(self, '(Error): %s' % message)
+def getaddrinfo(host, port, family=0, socktype=0, proto=0, flags=0):
+    return get_hub().resolver.getaddrinfo(host, port, family, socktype, proto, flags)
 
-class RedisSocket(object):
-    """Green version of :class:`geventredis.client.RedisClient`
 
-    The following methods are overridden:
+class _closedsocket(object):
+    __slots__ = []
 
-        * send_request
-        * read_response
-    """
+    def _dummy(*args):
+        raise error(EBADF, 'Bad file descriptor')
+    # All _delegate_methods must also be initialized here.
+    send = recv = recv_into = sendto = recvfrom = recvfrom_into = _dummy
+    __getattr__ = _dummy
 
-    def __init__(self, int family=AF_INET, int type=SOCK_STREAM, int proto=0):
-        self._sock = socket(family, type, proto)
-        self.timeout = getdefaulttimeout()
+
+_delegate_methods = ("recv", "recvfrom", "recv_into", "recvfrom_into", "send", "sendto", 'sendall')
+
+timeout_default = object()
+
+
+class socket(object):
+
+    def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, _sock=None):
+        if _sock is None:
+            self._sock = _realsocket(family, type, proto)
+            self.timeout = _socket.getdefaulttimeout()
+        else:
+            if hasattr(_sock, '_sock'):
+                self._sock = _sock._sock
+                self.timeout = getattr(_sock, 'timeout', False)
+                if self.timeout is False:
+                    self.timeout = _socket.getdefaulttimeout()
+            else:
+                self._sock = _sock
+                self.timeout = _socket.getdefaulttimeout()
         self._sock.setblocking(0)
         fileno = self._sock.fileno()
         self.hub = get_hub()
         io = self.hub.loop.io
         self._read_event = io(fileno, 1)
         self._write_event = io(fileno, 2)
-        self._rbuf = StringIO()
 
     def __repr__(self):
         return '<%s at %s %s>' % (type(self).__name__, hex(id(self)), self._formatinfo())
@@ -77,7 +98,7 @@ class RedisSocket(object):
             result += ' timeout=' + str(self.timeout)
         return result
 
-    def _wait(self, object watcher, object timeout_exc=timeout('timed out')):
+    def _wait(self, watcher, timeout_exc=timeout('timed out')):
         """Block the current greenlet until *watcher* has pending events.
 
         If *timeout* is non-negative, then *timeout_exc* is raised after *timeout* second has passed.
@@ -98,7 +119,7 @@ class RedisSocket(object):
 
     def accept(self):
         sock = self._sock
-        while 1:
+        while True:
             try:
                 client_socket, address = sock.accept()
                 break
@@ -110,7 +131,7 @@ class RedisSocket(object):
             self._wait(self._read_event)
         return socket(_sock=client_socket), address
 
-    def close(self, object _closedsocket=None, object _delegate_methods=None, object setattr=setattr):
+    def close(self,_closedsocket=_closedsocket, _delegate_methods=_delegate_methods, setattr=setattr):
         # This function should not reference any globals. See Python issue #808164.
         self.hub.cancel_wait(self._read_event, cancel_wait_ex)
         self.hub.cancel_wait(self._write_event, cancel_wait_ex)
@@ -119,7 +140,7 @@ class RedisSocket(object):
         for method in _delegate_methods:
             setattr(self, method, dummy)
 
-    def connect(self, tuple address):
+    def connect(self, address):
         if self.timeout == 0.0:
             return self._sock.connect(address)
         sock = self._sock
@@ -146,7 +167,7 @@ class RedisSocket(object):
             if timer is not None:
                 timer.cancel()
 
-    def connect_ex(self, tuple address):
+    def connect_ex(self, address):
         try:
             return self.connect(address) or 0
         except timeout:
@@ -164,7 +185,7 @@ class RedisSocket(object):
         Return a new socket object connected to the same system resource.
         Note, that the new socket does not inherit the timeout."""
         return socket(_sock=self._sock)
-      
+
     def recv(self, *args):
         sock = self._sock  # keeping the reference so that fd is not closed during waiting
         while True:
@@ -230,7 +251,7 @@ class RedisSocket(object):
                     return 0
                 raise
 
-    def send(self, object data, int flags=0, object timeout=timeout_default):
+    def send(self, data, flags=0, timeout=timeout_default):
         sock = self._sock
         if timeout is timeout_default:
             timeout = self.timeout
@@ -256,7 +277,7 @@ class RedisSocket(object):
                     return 0
                 raise
 
-    def sendall(self, object data, int flags=0):
+    def sendall(self, data, flags=0):
         if isinstance(data, unicode):
             data = data.encode()
         # this sendall is also reused by gevent.ssl.SSLSocket subclass,
@@ -267,13 +288,13 @@ class RedisSocket(object):
                 data_sent += self.send(_get_memory(data, data_sent), flags)
         else:
             timeleft = self.timeout
-            end = time() + timeleft
+            end = time.time() + timeleft
             data_sent = 0
             while True:
                 data_sent += self.send(_get_memory(data, data_sent), flags, timeout=timeleft)
                 if data_sent >= len(data):
                     break
-                timeleft = end - time()
+                timeleft = end - time.time()
                 if timeleft <= 0:
                     raise timeout('timed out')
 
@@ -295,13 +316,13 @@ class RedisSocket(object):
                     return 0
                 raise
 
-    def setblocking(self, int flag):
+    def setblocking(self, flag):
         if flag:
             self.timeout = None
         else:
             self.timeout = 0.0
 
-    def settimeout(self, object howlong):
+    def settimeout(self, howlong):
         if howlong is not None:
             try:
                 f = howlong.__float__
@@ -315,7 +336,7 @@ class RedisSocket(object):
     def gettimeout(self):
         return self.timeout
 
-    def shutdown(self, int how):
+    def shutdown(self, how):
         if how == 0:  # SHUT_RD
             self.hub.cancel_wait(self._read_event, cancel_wait_ex)
         elif how == 1:  # SHUT_RW
@@ -324,8 +345,15 @@ class RedisSocket(object):
             self.hub.cancel_wait(self._read_event, cancel_wait_ex)
             self.hub.cancel_wait(self._write_event, cancel_wait_ex)
         self._sock.shutdown(how)
+        
+        
+class RedisSocket(socket):
 
-    def read(self, size):
+    def __init__(self, family=AF_INET, type=SOCK_STREAM, proto=0, _sock=None):
+        socket.__init__(self, family, type, proto, _sock)
+        self._rbuf = StringIO()
+        
+    def _read(self, size):
         buf = self._rbuf
         buf.seek(0, 2)  # seek end
         # Read until size bytes or EOF seen, whichever comes first
@@ -363,7 +391,7 @@ class RedisSocket(object):
             #assert buf_len == buf.tell()
         return buf.getvalue()
 
-    def readline(self):
+    def _readline(self):
         buf = self._rbuf
         buf.seek(0, 2)  # seek end
         if buf.tell() > 0:
@@ -396,30 +424,10 @@ class RedisSocket(object):
                 break
             buf.write(data)
         return buf.getvalue()
-
-    def send_request(self, str command, *args):
-        data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command) + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
-        self.send(data)
-    
-    def send_request_1(self, str command):
-        data = '*1\r\n$%d\r\n%s\r\n' % (len(command), command)
-        self.send(data)
-    
-    def send_request_2(self, str command, str arg1):
-        data = '*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(command), command, len(arg1), arg1)
-        self.send(data)
         
-    def send_request_3(self, str command, str arg1, str arg2):
-        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(command), command, len(arg1), arg1, len(arg2), arg2)
-        self.send(data)
-        
-    def send_request_4(self, str command, str arg1, str arg2, str arg3):
-        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(command), command, len(arg1), arg1, len(arg2), arg2, len(arg3), arg3)
-        self.send(data)
-        
-    def read_response(self):
-        read = self.read
-        readline = self.readline
+    def _read_response(self):
+        read = self._read
+        readline = self._readline
         response = readline()
         byte, response = response[0], response[1:]
         if byte == '+':
@@ -454,5 +462,37 @@ class RedisSocket(object):
             return RedisError(readline()[:-2])
         else:
             raise RedisError('bulk cannot startswith %r' % byte)
+            
+    def _execute_command(self, *args):
+        """Executes a redis command and return a result"""
+        data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
+        self.send(data)
+        return self._read_response()
+
+    def _execute_yield_command(self, command, *args):
+        """Executes a redis command and yield multiple results"""
+        data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
+        self.send(data)
+        while 1:
+            yield self.response()
+
+    def _execute_command_1(self, str arg1):
+        data = '*1\r\n$%d\r\n%s\r\n' % (len(arg1), arg1)
+        self.send(data)
+        return self._read_response()
+    
+    def _execute_command_2(self, str arg1, str arg2):
+        data = '*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2)
+        self.send(data)
+        return self._read_response()
         
+    def _execute_command_3(self, str arg1, str arg2, str arg3):
+        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3), arg3)
+        self.send(data)
+        return self._read_response()
+        
+    def _execute_command_4(self, str arg1, str arg2, str arg3, str arg4):
+        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3), arg3, len(arg4), arg4)
+        self.send(data)
+        return self._read_response()   
     

@@ -16,14 +16,7 @@
 
 """Redis client implementations using gevent.socket"""
 
-import collections
-import cStringIO
-
-try:
-    from gevent import socket
-except ImportError:
-    print('import gevent.socket fail, fallback to standard socket module')
-    import socket
+import core
 
 def connect(host='localhost', port=6379, timeout=None):
     """Create gevent Redis client.
@@ -41,7 +34,10 @@ def connect(host='localhost', port=6379, timeout=None):
     specification, but it does enough to work with major redis server APIs
     (mostly tested against the LIST/HASH/PUBSUB API so far).
     """
-    return RedisClient(host, port, timeout)
+    redis_client = RedisClient()
+    redis_client.timeout = timeout
+    redis_client.connect((host, port))
+    return redis_client
 
 def list_or_args(keys, args):
     # returns a single list combining keys and args
@@ -57,29 +53,8 @@ def list_or_args(keys, args):
         keys.extend(args)
     return keys
 
-class RedisSocket(socket.socket):
 
-    def __init__(self, *args, **kwargs):
-        socket.socket.__int__(self, *args, **kwargs)
-        self._read_buffer = cStringIO.StringIO()
-
-    def read_bytes(self, size):
-        bufsize = 8192
-        recv = self.recv
-        buf = self._read_buffer
-        size -= len(read_buffer)
-        while size < 0:
-            try:
-                data = recv(bufsize)
-                if not data:
-                    break
-
-            if not data
-            size -= len(data)
-
-
-
-class RedisClient(object):
+class RedisClient(core.RedisSocket):
     """An gevent Redis client.
 
     Example usage::
@@ -87,6 +62,7 @@ class RedisClient(object):
         import geventredis
 
         redis_client = geventredis.RedisClient('127.0.0.1', 6379)
+        redis_client.connect('127.0.0.1', 6379)
         result = redis_client.get('foo')
         print result
 
@@ -95,75 +71,6 @@ class RedisClient(object):
     specification, but it does enough to work with major redis server APIs
     (mostly tested against the LIST/HASH/PUBSUB API so far).
     """
-
-    def __init__(self, host='localhost', port=6379, timeout=None):
-        """Create a Reids Client and Connect to a Redis Server.
-
-        If you want to disconnect redis server and free resources immediately,
-        you can use `del redis_client`
-        """
-        self._address = (host, port)
-        self._timeout = timeout
-        self._socket  = socket.create_connection(self._address, self._timeout)
-        self._rfile   = self._socket.makefile('r')
-
-    def __del__(self):
-        """Destroys this redis client, freeing any file descriptors used."""
-        self._socket.close()
-
-    def _execute_command(self, command, *args):
-        """Executes a redis command and return a result"""
-        data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
-               + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
-        self._socket.send(data)
-        return self._read_respone()
-
-    def _execute_yield_command(self, command, *args):
-        """Executes a redis command and yield multiple results"""
-        data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command)\
-               + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
-        self._socket.send(data)
-        while 1:
-            yield self._read_respone()
-
-    def _read_respone(self):
-        """Read a completed result data from the redis server."""
-        read = self._rfile.read
-        readline = self._rfile.readline
-        response = readline()
-        byte, response = response[0], response[1:]
-        if byte == '+':
-            return response[:2]
-        elif byte == ':':
-            return int(response)
-        elif byte == '$':
-            number = int(response)
-            if number == -1:
-                return None
-            else:
-                return read(number+2)[:-2]
-        elif byte == '*':
-            number = int(readline())
-            if number == -1:
-                return None
-            else:
-                result = []
-                while number:
-                    response = readline()
-                    byte, response = response[0], response[1:]
-                    if byte == '$':
-                        result.append(read(int(response)+2)[:-2])
-                    else:
-                        if byte == ':':
-                            result.append(int(readline()))
-                        else:
-                            result.append(readline()[:-2])
-                    number -= 1
-                return result
-        elif byte == '-':
-            return RedisError(readline()[:-2])
-        else:
-            raise RedisError('bulk cannot startswith %r' % c)
 
     #### SERVER INFORMATION ####
     def bgrewriteaof(self):
@@ -990,12 +897,6 @@ class RedisClient(object):
     def monitor(self):
         """Monitor to all commands in redis server"""
         return self._execute_yield_command('MONITOR')
-
-
-class RedisError(Exception):
-    """Exception thrown for an unsuccessful Redis request."""
-    def __init__(self, message):
-        Exception.__init__(self, '(Error): %s' % message)
 
 def test():
     redis_client = connect('127.0.0.1', 6379)
