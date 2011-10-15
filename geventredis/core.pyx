@@ -486,13 +486,16 @@ class RedisSocket(socket):
         self.send(data)
         return self._read_response()
         
-    def _execute_command_3(self, str arg1, str arg2, str arg3):
-        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3), arg3)
+    def _execute_command_3(self, str arg1, str arg2, object arg3):
+        cdef str arg3_ = str(arg3)
+        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3_), arg3_)
         self.send(data)
         return self._read_response()
         
-    def _execute_command_4(self, str arg1, str arg2, str arg3, str arg4):
-        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3), arg3, len(arg4), arg4)
+    def _execute_command_4(self, str arg1, str arg2, object arg3, object arg4):
+        cdef str arg3_ = str(arg3)
+        cdef str arg4_ = str(arg4)
+        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3_), arg3_, len(arg4_), arg4_)
         self.send(data)
         return self._read_response()   
     
