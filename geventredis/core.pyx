@@ -400,6 +400,22 @@ class RedisSocket(object):
     def send_request(self, str command, *args):
         data = '*%d\r\n$%d\r\n%s\r\n' % (1+len(args), len(command), command) + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
         self.send(data)
+    
+    def send_request_1(self, str command):
+        data = '*1\r\n$%d\r\n%s\r\n' % (len(command), command)
+        self.send(data)
+    
+    def send_request_2(self, str command, str arg1):
+        data = '*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(command), command, len(arg1), arg1)
+        self.send(data)
+        
+    def send_request_3(self, str command, str arg1, str arg2):
+        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(command), command, len(arg1), arg1, len(arg2), arg2)
+        self.send(data)
+        
+    def send_request_4(self, str command, str arg1, str arg2, str arg3):
+        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(command), command, len(arg1), arg1, len(arg2), arg2, len(arg3), arg3)
+        self.send(data)
         
     def read_response(self):
         read = self.read
