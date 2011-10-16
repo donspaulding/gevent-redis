@@ -92,18 +92,19 @@ class RedisSocket(socket):
         read = self._read
         readline = self._readline
         response = readline()
-        byte, response = response[0], response[1:]
-        if byte == '+':
+        byte = ord(response[0])
+        response = response[1:]
+        if byte is 43: # ord('+')
             return response[:2]
-        elif byte == ':':
+        elif byte is 58: # ord(':')
             return int(response)
-        elif byte == '$':
+        elif byte is 36: # ord('$')
             number = int(response)
             if number == -1:
                 return None
             else:
                 return read(number+2)[:-2]
-        elif byte == '*':
+        elif byte is 42: # ord('*')
             number = int(readline())
             if number == -1:
                 return None
@@ -111,17 +112,18 @@ class RedisSocket(socket):
                 result = []
                 while number:
                     response = readline()
-                    byte, response = response[0], response[1:]
-                    if byte == '$':
+                    byte = ord(response[0])
+                    response = response[1:]
+                    if byte is 36: # ord('$')
                         result.append(read(int(response)+2)[:-2])
                     else:
-                        if byte == ':':
+                        if byte is 58: # ord(':')
                             result.append(int(readline()))
                         else:
                             result.append(readline()[:-2])
                     number -= 1
                 return result
-        elif byte == '-':
+        elif byte is 45: #ord('-')
             return RedisError(readline()[:-2])
         else:
             raise RedisError('bulk cannot startswith %r' % byte)
