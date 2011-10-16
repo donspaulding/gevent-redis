@@ -25,10 +25,12 @@ class RedisSocket(socket):
             return rv
 
         self._rbuf = StringIO()  # reset _rbuf.  we consume it via buf.
+        self_recv = self.recv
+        buf_write = buf.write
         while True:
             left = size - buf_len
             try:
-                data = self.recv(left)
+                data = self_recv(left)
             except error, e:
                 if e.args[0] == EINTR:
                     continue
@@ -39,11 +41,11 @@ class RedisSocket(socket):
             if n == size and not buf_len:
                 return data
             if n == left:
-                buf.write(data)
+                buf_write(data)
                 del data  # explicit free
                 break
             assert n <= left, "recv(%d) returned %d bytes" % (left, n)
-            buf.write(data)
+            buf_write(data)
             buf_len += n
             del data  # explicit free
             #assert buf_len == buf.tell()
@@ -64,9 +66,12 @@ class RedisSocket(socket):
         # Read until \n or EOF, whichever comes first
         buf.seek(0, 2)  # seek end
         self._rbuf = StringIO()  # reset _rbuf.  we consume it via buf.
+        self__rbuf_write = self._rbuf.write
+        self_recv = self.recv
+        buf_write = buf.write
         while True:
             try:
-                data = self.recv(8192)
+                data = self_recv(8192)
             except error, e:
                 if e.args[0] == EINTR:
                     continue
@@ -76,11 +81,11 @@ class RedisSocket(socket):
             nl = data.find('\n')
             if nl >= 0:
                 nl += 1
-                buf.write(data[:nl])
-                self._rbuf.write(data[nl:])
+                buf_write(data[:nl])
+                self__rbuf_write(data[nl:])
                 del data
                 break
-            buf.write(data)
+            buf_write(data)
         return buf.getvalue()
 
     def _read_response(self):
