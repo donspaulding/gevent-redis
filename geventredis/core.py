@@ -139,7 +139,7 @@ class RedisSocket(socket):
         data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
         self.send(data)
         while 1:
-            yield self.response()
+            yield self._read_response()
 
     def _execute_command_1(self, arg1):
         data = '*1\r\n$%d\r\n%s\r\n' % (len(arg1), arg1)

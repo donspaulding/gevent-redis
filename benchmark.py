@@ -3,7 +3,7 @@
 import time
 
 CONNECTIONS = 50
-INCR_NUMBER = 1000
+INCR_NUMBER = 10
 
 def test_redispy():
     import threading, redis
