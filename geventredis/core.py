@@ -3,8 +3,7 @@
 
 from cStringIO import StringIO
 from errno import EINTR
-from _socket import error
-from gevent.socket import socket
+from gevent.socket import socket, error
 
 class RedisSocket(socket):
 
