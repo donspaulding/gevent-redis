@@ -110,16 +110,17 @@ class RedisSocket(socket):
                 return None
             else:
                 result = []
+                result_append = result.append
                 while number:
                     response = readline()
                     byte = ord(response[0])
                     if byte is 36: # ord('$')
-                        result.append(read(int(response[1:])+2)[:-2])
+                        result_append(read(int(response[1:])+2)[:-2])
                     else:
                         if byte is 58: # ord(':')
-                            result.append(int(response[1:]))
+                            result_append(int(response[1:]))
                         else:
-                            result.append(response[1:-2])
+                            result_append(response[1:-2])
                     number -= 1
                 return result
         elif byte is 45: #ord('-')
