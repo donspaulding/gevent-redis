@@ -95,7 +95,7 @@ class RedisSocket(socket):
         byte = ord(response[0])
         response = response[1:]
         if byte is 43: # ord('+')
-            return response[:2]
+            return response[:-2]
         elif byte is 58: # ord(':')
             return int(response)
         elif byte is 36: # ord('$')
@@ -105,7 +105,7 @@ class RedisSocket(socket):
             else:
                 return read(number+2)[:-2]
         elif byte is 42: # ord('*')
-            number = int(readline())
+            number = int(response)
             if number == -1:
                 return None
             else:
@@ -118,13 +118,13 @@ class RedisSocket(socket):
                         result.append(read(int(response)+2)[:-2])
                     else:
                         if byte is 58: # ord(':')
-                            result.append(int(readline()))
+                            result.append(int(response))
                         else:
-                            result.append(readline()[:-2])
+                            result.append(response[:-2])
                     number -= 1
                 return result
         elif byte is 45: #ord('-')
-            return RedisError(readline()[:-2])
+            return RedisError(response[:-2])
         else:
             raise RedisError('bulk cannot startswith %r' % byte)
 
@@ -134,12 +134,12 @@ class RedisSocket(socket):
         self.send(data)
         return self._read_response()
 
-    def _execute_yield_command(self, command, *args):
+    def _execute_yield_command(self, *args):
         """Executes a redis command and yield multiple results"""
         data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
         self.send(data)
         while 1:
-            yield self.response()
+            yield self._read_response()
 
     def _execute_command_1(self, arg1):
         data = '*1\r\n$%d\r\n%s\r\n' % (len(arg1), arg1)
