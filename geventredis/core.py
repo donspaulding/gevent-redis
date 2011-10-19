@@ -3,7 +3,7 @@
 
 from cStringIO import StringIO
 from errno import EINTR
-from gevent.socket import socket
+from gevent.socket import socket, error
 
 class RedisSocket(socket):
 
@@ -93,38 +93,37 @@ class RedisSocket(socket):
         readline = self._readline
         response = readline()
         byte = ord(response[0])
-        response = response[1:]
         if byte is 43: # ord('+')
-            return response[:2]
+            return response[1:-2]
         elif byte is 58: # ord(':')
-            return int(response)
+            return int(response[1:])
         elif byte is 36: # ord('$')
-            number = int(response)
+            number = int(response[1:])
             if number == -1:
                 return None
             else:
                 return read(number+2)[:-2]
         elif byte is 42: # ord('*')
-            number = int(readline())
+            number = int(response[1:])
             if number == -1:
                 return None
             else:
                 result = []
+                result_append = result.append
                 while number:
                     response = readline()
                     byte = ord(response[0])
-                    response = response[1:]
                     if byte is 36: # ord('$')
-                        result.append(read(int(response)+2)[:-2])
+                        result_append(read(int(response[1:])+2)[:-2])
                     else:
                         if byte is 58: # ord(':')
-                            result.append(int(readline()))
+                            result_append(int(response[1:]))
                         else:
-                            result.append(readline()[:-2])
+                            result_append(response[1:-2])
                     number -= 1
                 return result
         elif byte is 45: #ord('-')
-            return RedisError(readline()[:-2])
+            return RedisError(response[1:-2])
         else:
             raise RedisError('bulk cannot startswith %r' % byte)
 
@@ -134,7 +133,7 @@ class RedisSocket(socket):
         self.send(data)
         return self._read_response()
 
-    def _execute_yield_command(self, command, *args):
+    def _execute_yield_command(self, *args):
         """Executes a redis command and yield multiple results"""
         data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
         self.send(data)
