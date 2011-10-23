@@ -2,22 +2,23 @@
 
 import time
 
-CONNECTIONS = 50
-INCR_NUMBER = 10
+CONNECTIONS = 10
+INCR_NUMBER = 100
 
 def test_redispy():
     import threading, redis
     import gevent.monkey
     gevent.monkey.patch_all()
     redis_client = redis.Redis()
-    redis_client.delete('x')
+    redis_client.delete('test')
     del redis_client
     time_begin = time.time()
     print 'test_redispy begin', time_begin
     def worker():
         redis_client = redis.Redis()
         for i in xrange(INCR_NUMBER):
-            redis_client.incr('x')
+            redis_client.lpush('test', i)
+            redis_client.lrange('test', 0, -1)
     jobs = [threading.Thread(target=worker) for i in xrange(CONNECTIONS)]
     for job in jobs:
         job.start()
@@ -30,14 +31,15 @@ def test_redispy():
 def test_geventredis():
     import gevent, geventredis
     redis_client = geventredis.connect()
-    redis_client.delete('x')
+    redis_client.delete('test')
     del redis_client
     time_begin = time.time()
     print 'test_geventredis begin', time_begin
     def worker():
         redis_client = geventredis.connect()
         for i in xrange(INCR_NUMBER):
-            redis_client.incr('x')
+            redis_client.lpush('test', i)
+            redis_client.lrange('test', 0, -1)
     jobs = [gevent.spawn(worker) for i in xrange(CONNECTIONS)]
     gevent.joinall(jobs)
     time_end = time.time()

@@ -5,6 +5,9 @@ from cStringIO import StringIO
 from errno import EINTR
 from gevent.socket import socket, error
 
+class RedisError(Exception):
+    pass
+
 class RedisSocket(socket):
 
     def __init__(self, *args, **kwargs):
@@ -129,13 +132,13 @@ class RedisSocket(socket):
 
     def _execute_command(self, *args):
         """Executes a redis command and return a result"""
-        data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
+        data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
         self.send(data)
         return self._read_response()
 
     def _execute_yield_command(self, *args):
         """Executes a redis command and yield multiple results"""
-        data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(x), x) for x in args])
+        data = '*%d\r\n' % len(args) + ''.join(['$%d\r\n%s\r\n' % (len(str(x)), x) for x in args])
         self.send(data)
         while 1:
             yield self._read_response()
@@ -146,20 +149,16 @@ class RedisSocket(socket):
         return self._read_response()
 
     def _execute_command_2(self, arg1, arg2):
-        data = '*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2)
+        data = '*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(str(arg2)), arg2)
         self.send(data)
         return self._read_response()
 
     def _execute_command_3(self, arg1, arg2, arg3):
-        arg3_ = str(arg3)
-        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3_), arg3_)
+        data = '*3\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(str(arg2)), arg2, len(str(arg3)), arg3)
         self.send(data)
         return self._read_response()
 
     def _execute_command_4(self, arg1, arg2, arg3, arg4):
-        arg3_ = str(arg3)
-        arg4_ = str(arg4)
-        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(arg2), arg2, len(arg3_), arg3_, len(arg4_), arg4_)
+        data = '*4\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n' % (len(arg1), arg1, len(str(arg2)), arg2, len(str(arg3)), arg3, len(str(arg4)), arg4)
         self.send(data)
         return self._read_response()
-
